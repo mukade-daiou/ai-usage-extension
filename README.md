@@ -76,6 +76,16 @@ requests retain the last successful snapshot and its original update time.
 The worker checks and restores the recurring alarm whenever it starts. Chrome may
 delay alarms while the device is asleep.
 
+The z.ai bridge distinguishes automatically observed session tokens from a manually
+entered GLM API key. After observing a token, it reports a subsequent absence only
+if storage is still empty after one second; initial empty or unreadable storage
+does not clear credentials. Storage/visibility events and a three-second check
+cover same-tab changes. The worker clears only the matching auto token, so a late
+clear from another tab cannot remove a newer token or the manual API key.
+An already running request may finish; cached usage keeps its original timestamp.
+Page navigation before a removal is observed and server-side logout invalidation
+still require real-site verification.
+
 **Localization:** every user-visible string goes through `msg()`
 (`src/shared/i18n.ts`), which reads `public/_locales/<locale>/messages.json`.
 All 53 Chrome Web Store languages are translated and the release tests enforce

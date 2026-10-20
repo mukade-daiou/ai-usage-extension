@@ -113,12 +113,24 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   }
 });
 
-const storeGlmToken = async (token: string): Promise<void> => {
-  const stored = await chrome.storage.local.get(STORAGE_KEYS.glmToken);
-  if (stored[STORAGE_KEYS.glmToken] === token) return;
-
-  await chrome.storage.local.set({ [STORAGE_KEYS.glmToken]: token });
-  await refreshAfterInFlight();
+let glmTokenUpdateQueue: Promise<void> = Promise.resolve();
+const storeGlmToken = (token: string, clear: boolean): Promise<void> => {
+  const update = glmTokenUpdateQueue
+    .catch(() => undefined)
+    .then(async () => {
+      const stored = await chrome.storage.local.get(STORAGE_KEYS.glmToken);
+      if (clear) {
+        // A delayed logout from an old tab must not erase a newer session.
+        if (stored[STORAGE_KEYS.glmToken] !== token) return;
+        await chrome.storage.local.remove(STORAGE_KEYS.glmToken);
+      } else {
+        if (stored[STORAGE_KEYS.glmToken] === token) return;
+        await chrome.storage.local.set({ [STORAGE_KEYS.glmToken]: token });
+      }
+      void refreshAfterInFlight().catch(() => undefined);
+    });
+  glmTokenUpdateQueue = update;
+  return update;
 };
 
 const collectLocaleMessages = async (): Promise<Record<string, string> | null> => {
@@ -129,7 +141,7 @@ const collectLocaleMessages = async (): Promise<Record<string, string> | null> =
 chrome.runtime.onMessage.addListener(
   (
     message: ExtensionMessage,
-    _sender,
+    sender,
     sendResponse: (response: RefreshUsageResponse | LocaleMessagesResponse) => void,
   ) => {
     if (message?.type === 'GET_LOCALE_MESSAGES') {
@@ -152,12 +164,26 @@ chrome.runtime.onMessage.addListener(
       return true;
     }
 
-    if (message?.type === 'SET_GLM_TOKEN') {
+    if (message?.type === 'SET_GLM_TOKEN' || message?.type === 'CLEAR_GLM_TOKEN') {
       const token = typeof message.token === 'string' ? message.token.trim() : '';
-      if (token) void storeGlmToken(token).catch(() => undefined);
-      sendResponse({ success: true, data: null });
-
-      return undefined;
+      let trusted = false;
+      try {
+        trusted =
+          sender.id === chrome.runtime.id &&
+          sender.frameId === 0 &&
+          typeof sender.tab?.id === 'number' &&
+          new URL(sender.url ?? '').origin === 'https://z.ai';
+      } catch {
+        /* malformed sender */
+      }
+      if (!trusted || !token) {
+        sendResponse({ success: false, error: 'invalid_glm_token_message' });
+        return undefined;
+      }
+      storeGlmToken(token, message.type === 'CLEAR_GLM_TOKEN')
+        .then(() => sendResponse({ success: true, data: null }))
+        .catch(() => sendResponse({ success: false, error: 'glm_token_storage_failed' }));
+      return true;
     }
 
     if (message?.type !== 'REFRESH_USAGE') {

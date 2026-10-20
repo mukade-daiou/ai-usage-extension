@@ -129,6 +129,7 @@ export type ExtensionMessage =
   | { type: 'REFRESH_USAGE' }
   | { type: 'GET_LOCALE_MESSAGES' }
   | { type: 'SET_GLM_TOKEN'; token: string }
+  | { type: 'CLEAR_GLM_TOKEN'; token: string }
   | {
       type: 'TRACK';
       context: AnalyticsContext;
