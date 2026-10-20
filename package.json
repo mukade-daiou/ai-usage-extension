@@ -41,7 +41,7 @@
 		"dev": "vite build --watch --mode development",
 		"bump": "node scripts/bump-version.js",
 		"typecheck": "tsc --noEmit",
-		"test": "node --test tests/",
+		"test": "node --test",
 		"build": "tsc --noEmit && vite build",
 		"release": "pnpm test && pnpm build && node scripts/release.js",
 		"promo": "node scripts/promo.js",
